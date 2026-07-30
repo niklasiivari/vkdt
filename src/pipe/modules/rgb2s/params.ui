@@ -1,0 +1,6 @@
+mode:combo:camera:rec.2020
+exposure:slider:-5:5
+group:mode:0
+temp:slider:2000:15000
+group:-1:-1
+tint:slider:-1:1

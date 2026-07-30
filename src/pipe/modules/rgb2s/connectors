@@ -1,0 +1,4 @@
+input:read:rgba:*
+output:write:rgba:f16
+sclut:read:rgba:f32
+picked:read:r:f16

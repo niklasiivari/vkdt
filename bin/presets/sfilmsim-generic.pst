@@ -1,0 +1,24 @@
+# Spectral analog film simulation without a camera SSF.
+# Uses rgb2s in rec.2020 mode to spectrally upsample linear rec2020 scene data
+# via spectra-em.lut, then runs sfilmsim and s2rgb.
+# This replaces both the colour transform and filmcurv nodes with the full
+# spectral pipeline, accepting some accuracy loss vs the camera-SSF path.
+# See also: sfilmsim.pst (requires a per-camera .spectral.lut).
+module:rgb2s:01
+module:sfilmsim:01
+module:s2rgb:01
+module:i-lut:spectem
+module:i-lut:filmsim
+param:i-lut:spectem:filename:data/spectra-em.lut
+param:i-lut:filmsim:filename:data/filmsim.lut
+param:rgb2s:01:mode:1
+# colour:01 stays for white balance and camera->rec2020 matrix.
+# rgb2s picks up its rec2020 output and spectrally upsamples via spectra-em.lut.
+connect:colour:01:output:rgb2s:01:input
+connect:i-lut:spectem:output:rgb2s:01:sclut
+connect:rgb2s:01:output:sfilmsim:01:input
+connect:i-lut:filmsim:output:sfilmsim:01:profile
+connect:sfilmsim:01:output:s2rgb:01:input
+connect:s2rgb:01:output:display:main:input
+connect:s2rgb:01:output:hist:01:input
+connect:-1:-1:-1:filmcurv:01:input

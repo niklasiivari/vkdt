@@ -1,0 +1,33 @@
+#version 460
+#extension GL_GOOGLE_include_directive : enable
+#include "head.glsl"
+#include "state.glsl"
+
+layout(set = 1, binding = 0) uniform sampler2D img_density;
+layout(set = 1, binding = 1, std430) readonly buffer buf_prep_t { filmsim_state_t prep; };
+layout(set = 1, binding = 2) uniform writeonly image2D img_out[spectral_groups];
+#include "state_ops.glsl"
+#include "print.glsl"
+
+float scan_glare(ivec2 ipos)
+{
+  if(prep.scan.glare_mean <= 0.0) return 0.0;
+  vec3 h = hash3(ipos, prep.scan.glare_seed);
+  return prep.scan.glare_mean * exp2(0.61823826 * (2.0*(h.x+h.y+h.z-1.5)) - 0.13246692);
+}
+
+void main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, textureSize(img_density, 0)))) return;
+  vec3 density = texelFetch(img_density, ipos, 0).rgb;
+  if(params.process == s_process_print)
+    density = eval_paper_density(enlarger_expose_film(density));
+  float glare = scan_glare(ipos);
+  for(int group=0; group<spectral_groups; group++)
+  {
+    vec4 dye = density.r*prep.scan.scan_dye_r[group] + density.g*prep.scan.scan_dye_g[group] + density.b*prep.scan.scan_dye_b[group];
+    vec4 radiance = (exp2(-dye) + vec4(glare)) * prep.scan.scan_radiance[group] / prep.scan.scan_autoexp_norm;
+    spectral_store(img_out, ipos, group, radiance);
+  }
+}

@@ -1,0 +1,146 @@
+#version 460
+#extension GL_GOOGLE_include_directive : enable
+#include "shared.glsl"
+#include "shared/spectral.glsl"
+
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  int   source;
+  float mix_val;
+  float d_cct;
+  float bb_cct;
+  float led_cct;
+  float led_cri;
+  float led_pmp;
+  int   discharge;
+  float laser_l1;
+  float laser_l2;
+  float bandwidth;
+} params;
+
+layout(set = 1, binding = 0) uniform sampler2D img_in[spectral_groups];
+layout(set = 1, binding = 1) uniform writeonly image2D img_out[spectral_groups];
+
+vec4 eval_light_spd_vec(int group, vec4 l, vec2 daylight_m)
+{
+  int src = clamp(params.source, 0, 4);
+  if (src == 0) // CIE Daylight Locus
+  {
+    return spectral_illuminant_spd_vec(params.d_cct, group, daylight_m);
+  }
+  else if (src == 1) // Planckian Blackbody Radiator
+  {
+    float cct = clamp(params.bb_cct, 1000.0, 10000.0);
+    return spectral_blackbody(l, cct) * (100.0 / spectral_blackbody(560.0, cct));
+  }
+  else if (src == 2) // Commercial White LED
+  {
+    float pump_l = clamp(params.led_pmp, 380.0, 780.0);
+    float phos_cct = clamp(params.led_cct, 2700.0, 6500.0);
+    float cri_factor = clamp(params.led_cri / 100.0, 0.5, 1.0);
+    vec4 pump = exp(-0.5 * pow((l - vec4(pump_l))/12.0, vec4(2.0)));
+    vec4 phos_yellow = exp(-0.5 * pow((l - vec4(560.0))/55.0, vec4(2.0)));
+    vec4 phos_red = exp(-0.5 * pow((l - vec4(630.0))/30.0, vec4(2.0)));
+    vec4 phos = mix(phos_yellow, phos_yellow + 0.6 * phos_red, cri_factor);
+    float blue_gain = clamp((phos_cct - 2700.0) / (6500.0 - 2700.0), 0.0, 1.0);
+    return mix(0.3, 1.0, blue_gain) * pump + mix(1.4, 0.8, blue_gain) * phos;
+  }
+  else if (src == 3) // Gas Discharge Lamps
+  {
+    int dis = clamp(params.discharge, 0, 4);
+    if (dis == 0) // Sodium HPS (Amber Doublet + Wings)
+    {
+      vec4 d0 = exp(-0.5 * pow((l - vec4(589.0))/12.0, vec4(2.0)));
+      vec4 d1 = 0.4 * exp(-0.5 * pow((l - vec4(569.0))/8.0, vec4(2.0)));
+      vec4 wing = 0.15 * exp(-0.5 * pow((l - vec4(600.0))/45.0, vec4(2.0)));
+      return d0 + d1 + wing;
+    }
+    else if (dis == 1) // Sodium LPS (Pure Monochromatic 589.3nm Line)
+    {
+      return exp(-0.5 * pow((l - vec4(589.3))/1.8, vec4(2.0)));
+    }
+    else if (dis == 2) // Mercury Vapor
+    {
+      vec4 hg0 = 0.4 * exp(-0.5 * pow((l - vec4(405.0))/3.0, vec4(2.0)));
+      vec4 hg1 = 0.6 * exp(-0.5 * pow((l - vec4(436.0))/3.0, vec4(2.0)));
+      vec4 hg2 = 1.0 * exp(-0.5 * pow((l - vec4(546.0))/3.0, vec4(2.0)));
+      vec4 hg3 = 0.7 * exp(-0.5 * pow((l - vec4(578.0))/3.0, vec4(2.0)));
+      return hg0 + hg1 + hg2 + hg3;
+    }
+    else if (dis == 3) // Metal Halide (Stadium Lighting)
+    {
+      vec4 m0 = 0.8 * exp(-0.5 * pow((l - vec4(435.0))/6.0, vec4(2.0)));
+      vec4 m1 = 1.0 * exp(-0.5 * pow((l - vec4(510.0))/15.0, vec4(2.0)));
+      vec4 m2 = 0.9 * exp(-0.5 * pow((l - vec4(590.0))/20.0, vec4(2.0)));
+      vec4 m3 = 0.5 * exp(-0.5 * pow((l - vec4(670.0))/10.0, vec4(2.0)));
+      return m0 + m1 + m2 + m3;
+    }
+    else // Fluorescent FL3 (Tri-Phosphor)
+    {
+      vec4 fl0 = 0.5 * exp(-0.5 * pow((l - vec4(436.0))/4.0, vec4(2.0)));
+      vec4 fl1 = 1.0 * exp(-0.5 * pow((l - vec4(546.0))/4.0, vec4(2.0)));
+      vec4 fl2 = 0.8 * exp(-0.5 * pow((l - vec4(611.0))/4.0, vec4(2.0)));
+      vec4 bg  = 0.2 * exp(-0.5 * pow((l - vec4(550.0))/50.0, vec4(2.0)));
+      return fl0 + fl1 + fl2 + bg;
+    }
+  }
+  else // Tunable Dual-Peak Laser
+  {
+    float l1 = clamp(params.laser_l1, 380.0, 780.0);
+    float l2 = clamp(params.laser_l2, 380.0, 780.0);
+    float bw = max(1.0, params.bandwidth);
+    vec4 p1 = exp(-0.5 * pow((l - vec4(l1))/bw, vec4(2.0)));
+    vec4 p2 = exp(-0.5 * pow((l - vec4(l2))/bw, vec4(2.0)));
+    return p1 + p2;
+  }
+}
+
+shared vec4 shared_relight_ratio[spectral_groups];
+
+void main()
+{
+  uint tid = gl_LocalInvocationIndex;
+  if (tid == 0)
+  {
+    float mix_val = clamp(params.mix_val, 0.0, 1.0);
+    if (mix_val <= 0.0)
+    {
+      for (int group = 0; group < spectral_groups; group++)
+        shared_relight_ratio[group] = vec4(1.0);
+    }
+    else
+    {
+      vec2 daylight_m = spectral_daylight_weights(params.d_cct);
+      vec4 spd_groups[spectral_groups];
+      float sum_y = 0.0;
+      for (int group = 0; group < spectral_groups; group++)
+      {
+        vec4 l = spectral_lambda[group];
+        vec4 spd = eval_light_spd_vec(group, l, daylight_m);
+        spd_groups[group] = spd;
+        sum_y += dot(spd * spectral_cmf_y[group], spectral_mask(group)) * spectral_step_nm;
+      }
+      float norm_factor = 1.0 / max(sum_y, 1e-6);
+
+      for (int group = 0; group < spectral_groups; group++)
+      {
+        vec4 ref_d65 = max(spectral_d65(group), vec4(1e-6));
+        vec4 relight_spd = spd_groups[group] * norm_factor;
+        shared_relight_ratio[group] = mix(vec4(1.0), relight_spd / ref_d65, vec4(mix_val));
+      }
+    }
+  }
+  barrier();
+
+  ivec2 p = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(p, imageSize(img_out[0])))) return;
+
+  for(int group = 0; group < spectral_groups; group++)
+  {
+    vec4 in_rad = spectral_fetch(img_in, p, group);
+    vec4 out_rad = in_rad * shared_relight_ratio[group];
+    spectral_store(img_out, p, group, out_rad);
+  }
+}

@@ -52,6 +52,34 @@ fetch_coeff(
   for(int k=0;k<3;k++) out[k] += (    u)*(    v)*c[k + 4*(wd*dy+dx)];
 }
 
+// Bilinear lookup retaining the LUT's fourth (normalization) coefficient.
+static inline void
+fetch_coeff4(
+    const double *xy,
+    const float  *spectra,
+    const int     wd,
+    const int     ht,
+    double       *out)
+{
+  for(int k=0;k<4;k++) out[k] = 0.0;
+  if(xy[0] < 0 || xy[1] < 0 || xy[0] > 1.0 || xy[1] > 1.0) return;
+  double tc[] = {xy[0], xy[1]};
+  tri2quad(tc+0, tc+1);
+  double xf = tc[0]*wd, yf = tc[1]*ht;
+  int x0 = (int)CLAMP(xf, 0, wd-1), y0 = (int)CLAMP(yf, 0, ht-1);
+  int x1 = (int)CLAMP(x0+1, 0, wd-1), y1 = (int)CLAMP(y0+1, 0, ht-1);
+  int dx = x1-x0, dy = y1-y0;
+  double u = xf-x0, v = yf-y0;
+  const float *c = spectra + 4*(y0*wd+x0);
+  for(int k=0;k<4;k++)
+  {
+    out[k] += (1.0-u)*(1.0-v)*c[k];
+    out[k] +=      u *(1.0-v)*c[k+4*dx];
+    out[k] += (1.0-u)*     v *c[k+4*wd*dy];
+    out[k] +=      u *     v *c[k+4*(wd*dy+dx)];
+  }
+}
+
 // nearest neighbour lookup
 static inline void
 fetch_coeffi(

@@ -7,11 +7,20 @@
 #include "core/fs.h"
 #include "core/half.h"
 #include "core/inpaint.h"
+#include <errno.h>
 #include <math.h>
 
 #define MKCLUT_MAX_ANCHORS 16
 
-// Planckian spectrum, 360--830nm at 1nm.
+// Planckian spectrum, 360--830nm at 1nm. Pinned to 100 at 560nm to match
+// synth_illuminant_daylight()'s convention below -- this isn't just cosmetic:
+// mkclut's normalise1() returns the raw (pre-normalization) L1 sum of a
+// color, and that raw magnitude is what ends up in the stored camera_to_ref
+// exposure scale (see spectral_scale in create_chroma_lut()). Without this
+// pin, camera_to_ref for any anchor below 4000K comes out ~1e10x smaller
+// than for anchors at/above 4000K (raw Planck's law radiance vs. the
+// peak-100 CIE convention), which is a real, ~35 EV exposure cliff in the
+// generated LUT, not merely a difference in curve shape.
 static inline int
 synth_illuminant_planckian(
     double         T,
@@ -21,6 +30,7 @@ synth_illuminant_planckian(
   const double c = 299792458.0;    // speed of light [m/s]
   const double k = 1.3807e-23;     // boltzmann's constant [J/K]
   int cnt = 0;
+  double v560 = 0.0;
   for(double l = 360.0; l <= 830.0; l += 1.0, cnt++)
   {
     const double lambda_m = l * 1e-9;
@@ -30,7 +40,10 @@ synth_illuminant_planckian(
     out[cnt][0] = l;
     out[cnt][1] = c1 / (exp(c2) - 1.0);
     out[cnt][2] = out[cnt][3] = 0.0;
+    if(l == 560.0) v560 = out[cnt][1];
   }
+  const double pin = 100.0 / v560;
+  for(int i=0;i<cnt;i++) out[i][1] *= pin;
   return cnt;
 }
 
@@ -173,11 +186,17 @@ create_chroma_lut(
     const int              cfa_spec_cnt,
     const double         (*cie_spec)[4],     // tabulated cie observer
     const int              cie_spec_cnt,
-    const int              ss)              // source oversampling factor
+    const int              ss,              // source oversampling factor
+    float                 **spectral_out)   // optional rgba sigmoid coefficients
 {
   int swd = sh->wd, sht = sh->ht; // sampling dimensions
   int wd  = swd, ht = sht; // output dimensions
   float *buf = calloc(sizeof(float)*3, wd*ht+1);
+  // Two RGBA bands per anchor: sigmoid coefficients/normalization followed
+  // by the camera-to-reference luminance scale.  Keeping them separate
+  // avoids overloading alpha and losing a physical quantity.
+  float *spectral_coeff = spectral_out ? calloc(sizeof(float)*4, wd*(uint64_t)ht) : 0;
+  float *spectral_scale = spectral_out ? calloc(sizeof(float)*4, wd*(uint64_t)ht) : 0;
 
   // do two passes over the data
   // get illum E white point (lowest saturation) in camera rgb and quad param:
@@ -233,8 +252,8 @@ create_chroma_lut(
   {
     double xy[2] = {(i+0.5)/sample_wd, (j+0.5)/sample_ht};
     quad2tri(xy+0, xy+1);
-    double cf[3]; // look up the coeffs for the sampled colour spectrum
-    fetch_coeff(xy, spectra, sh->wd, sh->ht, cf); // bilinear
+    double cf[4]; // look up the coeffs for the sampled colour spectrum
+    fetch_coeff4(xy, spectra, sh->wd, sh->ht, cf); // bilinear
     if(cf[0] == 0) continue; // discard out of spectral locus
 
     double cam_rgb_spec[3] = {0.0}; // camera rgb by processing spectrum * cfa spectrum
@@ -266,15 +285,70 @@ create_chroma_lut(
     int ii = CLAMP(u0 * wd + 0.5, 0, wd-1);
     int jj = CLAMP(u1 * ht + 0.5, 0, ht-1);
 
-    buf[3*(jj*wd + ii)+0] = rec2020[0];
-    buf[3*(jj*wd + ii)+1] = rec2020[2];
-    buf[3*(jj*wd + ii)+2] = rec2020_L1 / cam_rgb_L1;
+    uint64_t bidx = (uint64_t)jj*wd + ii;
+    buf[3*bidx+0] = rec2020[0];
+    buf[3*bidx+1] = rec2020[2];
+    buf[3*bidx+2] = rec2020_L1 / cam_rgb_L1;
+    if(spectral_coeff)
+    {
+      spectral_coeff[4*bidx+0] = cf[0];
+      spectral_coeff[4*bidx+1] = cf[1];
+      spectral_coeff[4*bidx+2] = cf[2];
+      spectral_coeff[4*bidx+3] = cf[3];
+      // Pure camera-to-reference radiometric gain for white.
+      spectral_scale[4*bidx+0] = white_rec2020_L1 / white_cam_rgb_L1;
+    }
   }
   free(angular_ds);
+
+  if(spectral_coeff)
+  {
+    dt_inpaint_buf_t coeff_inpaint = { .dat = spectral_coeff, .wd = wd, .ht = ht, .cpp = 4 };
+    dt_inpaint_buf_t scale_inpaint = { .dat = spectral_scale, .wd = wd, .ht = ht, .cpp = 4 };
+    dt_inpaint(&coeff_inpaint);
+    dt_inpaint(&scale_inpaint);
+    float *spectral = calloc(sizeof(float)*8, wd*(uint64_t)ht);
+    for(uint64_t k=0;k<(uint64_t)wd*ht;k++)
+    {
+      memcpy(spectral + 8*k, spectral_coeff + 4*k, 4*sizeof(float));
+      memcpy(spectral + 8*k + 4, spectral_scale + 4*k, 4*sizeof(float));
+    }
+    free(spectral_coeff);
+    free(spectral_scale);
+    *spectral_out = spectral;
+  }
 
   *wd_out = wd;
   *ht_out = ht;
   return buf;
+}
+
+// Two RGBA f32 bands per illuminant anchor: sigmoid coefficients first,
+// followed by the camera-to-reference luminance scale.
+static inline void
+write_spectral_lut_n(const char *basename, float **lut, int n, int wd, int ht)
+{
+  dt_lut_header_t h = { .magic = dt_lut_header_magic, .version = dt_lut_header_version,
+      .channels = 4, .datatype = dt_lut_header_f32, .wd = 2*n*wd, .ht = ht };
+  char filename[256];
+  snprintf(filename, sizeof(filename), "%s.spectral.lut", basename);
+  FILE *f = fopen(filename, "wb");
+  if(!f)
+  {
+    fprintf(stderr, "[mkclut] can't write spectral CLUT %s: %s\n", filename, strerror(errno));
+    return;
+  }
+  for(int a=0;a<n;a++)
+    if(!lut[a]) { fprintf(stderr, "[mkclut] missing spectral anchor %d\n", a); fclose(f); return; }
+  fwrite(&h, sizeof(h), 1, f);
+  for(int y=0;y<ht;y++)
+  {
+    for(int a=0;a<n;a++)
+      for(int x=0;x<wd;x++) fwrite(lut[a] + 8*((uint64_t)y*wd+x), sizeof(float), 4, f);
+    for(int a=0;a<n;a++)
+      for(int x=0;x<wd;x++) fwrite(lut[a] + 8*((uint64_t)y*wd+x)+4, sizeof(float), 4, f);
+  }
+  fclose(f);
 }
 
 // Write chroma bands and packed luminance pairs; n==2 uses the legacy layout.
@@ -360,12 +434,14 @@ int main(int argc, char *argv[])
   int n_nanchor = 0;
   int have_nanchor = 0;
   int ss = 8;
+  int spectral = 0;
   for(int k=1;k<argc;k++)
   {
     if     (!strcmp(argv[k], "--illum0") && argc > k+1) illum_file0 = argv[++k];
     else if(!strcmp(argv[k], "--illum1") && argc > k+1) illum_file1 = argv[++k];
     else if(!strcmp(argv[k], "--nanchor") && argc > k+1) { n_nanchor = atol(argv[++k]); have_nanchor = 1; }
     else if(!strcmp(argv[k], "--ss")      && argc > k+1) ss = MAX(1, atol(argv[++k]));
+    else if(!strcmp(argv[k], "--spectral")) spectral = 1;
     else model = argv[k];
   }
   if(!model)
@@ -381,7 +457,9 @@ int main(int argc, char *argv[])
                     "                                n>=3 anchor cluts.\n"
                     "              --ss <n>          source oversampling factor, default 8.\n"
                     "                                pure quality/runtime knob, see\n"
-                    "                                create_chroma_lut's comment.\n");
+                    "                                create_chroma_lut's comment.\n"
+                    "              --spectral        also write a companion RGBA f32\n"
+                    "                                sigmoid-coefficient CLUT.\n");
     exit(1);
   }
   if(have_nanchor)
@@ -409,6 +487,7 @@ int main(int argc, char *argv[])
 
   int clut_wd, clut_ht;
   float *clut[MKCLUT_MAX_ANCHORS];
+  float *spectral_lut[MKCLUT_MAX_ANCHORS] = {0};
   for(int ill=0;ill<n_anchor;ill++)
   {
     snprintf(filename, sizeof(filename), "%s/data/cie_observer", basedir);
@@ -454,7 +533,8 @@ int main(int argc, char *argv[])
         cfa_spec_cnt,
         cie_spec,
         cie_spec_cnt,
-        ss);
+        ss,
+        spectral ? spectral_lut + ill : 0);
 
 #if 0
     if(ill == 0)
@@ -492,9 +572,10 @@ int main(int argc, char *argv[])
   }
 
   write_chroma_lut_n(model, clut, n_anchor, clut_wd, clut_ht);
+  if(spectral) write_spectral_lut_n(model, spectral_lut, n_anchor, clut_wd, clut_ht);
 
   free(sp_buf);
-  for(int ill=0;ill<n_anchor;ill++) free(clut[ill]);
+  for(int ill=0;ill<n_anchor;ill++) { free(clut[ill]); free(spectral_lut[ill]); }
 
   exit(0);
 }

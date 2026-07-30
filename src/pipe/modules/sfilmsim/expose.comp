@@ -1,0 +1,43 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#include "head.glsl"
+#include "state.glsl"
+layout(set = 1, binding = 0) uniform sampler2D img_spectrum[spectral_groups];
+layout(set = 1, binding = 1, std430) readonly buffer buf_prep_t { filmsim_state_t prep; };
+layout(set = 1, binding = 2) uniform writeonly restrict image2D img_out;
+layout(set = 1, binding = 3) uniform writeonly restrict image2D img_exp;
+#include "state_ops.glsl"
+
+vec3 apply_highlight_boost(vec3 raw_norm)
+{
+  if(params.hl_boost_ev <= 0.0) return raw_norm;
+  float u = max(max(raw_norm.r, raw_norm.g), raw_norm.b);
+  if(u <= 2.944) return raw_norm;
+  float t = 0.1620843875 * min(u - 2.944, 61.056);
+  return raw_norm * (1.0 + prep.film.hl_boost_k_gain * (exp2(t * log2_e) - t - 1.0) / u);
+}
+
+void main()
+{
+  FILMSIM_BOUNDS_INIT(ipos);
+  vec3 raw = vec3(0.0);
+  for(int group=0; group<n_expose_groups; group++)
+  {
+    vec4 radiance = max(spectral_fetch(img_spectrum, ipos, group), vec4(0.0));
+    raw.r += dot(radiance, prep.film.expose_factor_r[group]);
+    raw.g += dot(radiance, prep.film.expose_factor_g[group]);
+    raw.b += dot(radiance, prep.film.expose_factor_b[group]);
+  }
+  vec3 log_raw = clamp((params.ev_film + log2(apply_highlight_boost(raw / prep.film.expose_autoexp_norm) + 1e-10)) * log10_2,
+      vec3(-4.0), vec3(4.0));
+
+  // cwarp and development share this gamma-corrected axis.
+  log_raw = clamp(params.gamma_film * log_raw, vec3(-4.0), vec3(4.0));
+
+  vec3 coupler = vec3(0.0);
+  [[branch]] if (params.couplers > 0)
+    coupler = clamp(coupler_inhibit_pre_blur(eval_film_density(log_raw)), vec3(-10.0), vec3(10.0));
+
+  imageStore(img_out, ipos, vec4(coupler, 1));
+  imageStore(img_exp, ipos, vec4(log_raw, 1));
+}

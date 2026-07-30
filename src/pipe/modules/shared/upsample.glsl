@@ -33,3 +33,10 @@ float sigmoid_eval(
   float val = 0.5 * x * y +  0.5;
   return val * coeff.w;
 }
+
+// vec4-lambda overload for grouped spectral iteration (10nm bands × 4).
+vec4 sigmoid_eval(vec4 coeff, vec4 lambda)
+{
+  vec4 x = (coeff.x * lambda + coeff.y) * lambda + coeff.z;
+  return (0.5 * x * inversesqrt(x * x + 1.0) + 0.5) * coeff.w;
+}

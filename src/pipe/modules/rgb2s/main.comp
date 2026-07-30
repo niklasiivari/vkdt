@@ -1,0 +1,78 @@
+#version 460
+#extension GL_GOOGLE_include_directive : enable
+#include "shared.glsl"
+#include "shared/spectral.glsl"
+#include "matrices.h"
+#include "shared/upsample.glsl"
+layout(local_size_x = DT_LOCAL_SIZE_X, local_size_y = DT_LOCAL_SIZE_Y, local_size_z = 1) in;
+layout(std140, set = 0, binding = 1) uniform params_t
+{
+  vec4 value;    // .x = sclut anchor position (or -1 for autotemp), .y = exp2(exposure), .z = temp_kelvin, .w = mode (0=sclut, 1=2D lut)
+  vec4 tint;
+  vec4 auto_wb;
+} params;
+layout(set = 1, binding = 0) uniform sampler2D img_in;
+layout(set = 1, binding = 1) uniform writeonly image2D img_out[spectral_groups];
+layout(set = 1, binding = 2) uniform sampler2D img_sclut;
+layout(set = 1, binding = 3) uniform sampler2D img_auto_temp;
+
+shared vec4 shared_tint_scale[spectral_groups];
+
+void main()
+{
+  uint tid = gl_LocalInvocationIndex;
+  if (tid < spectral_groups)
+  {
+    if (params.tint.x != 0.0)
+    {
+      vec4 l = spectral_lambda[tid];
+      vec4 w = vec4(1.0) - (l - vec4(540.0))*(l - vec4(540.0))/(160.0*160.0);
+      shared_tint_scale[tid] = exp2(-params.tint.x * 0.5 * w);
+    }
+    else
+    {
+      shared_tint_scale[tid] = vec4(1.0);
+    }
+  }
+  barrier();
+
+  ivec2 p = ivec2(gl_GlobalInvocationID); if(any(greaterThanEqual(p, textureSize(img_in, 0)))) return;
+  vec3 rgb = texelFetch(img_in, p, 0).rgb;
+
+  vec4 coeff;
+  if(params.value.w > 0.5) // rec2020 upsampling via spectra-em.lut
+  {
+    // fetch_coeff: rec2020->XYZ, chromaticity lookup, coeff.w = b/m.
+    // spectra-em.lut is fit under equal-energy (E); *D65 below converts to scene radiance.
+    coeff = fetch_coeff(img_sclut, max(vec3(0.0), rgb));
+    coeff.w *= params.value.y;
+  }
+  else // camera sclut anchor reconstruction
+  {
+    float b = max(dot(rgb, vec3(1)), 1e-8); vec2 tc = rgb.rb/b; tri2quad(tc);
+    // value.x == -1 is the autotemp sentinel; read the resolved position from
+    // the GPU buffer directly to avoid stale params before CPU readback.
+    float pos = params.value.x < 0.0 ? texelFetch(img_auto_temp, ivec2(0), 0).r : params.value.x;
+    ivec2 s = textureSize(img_sclut, 0); int n = max(1, s.x/(2*s.y)); float x = (tc.x + floor(pos*float(n-1)))/float(2*n);
+    vec4 c0 = texture(img_sclut, vec2(x, tc.y));
+    float a = pos*float(n-1), f = fract(a); int k1 = min(int(floor(a))+1, n-1);
+    vec4 c1 = texture(img_sclut, vec2((tc.x+float(k1))/float(2*n), tc.y));
+    vec4 s0 = texture(img_sclut, vec2((tc.x+float(n)+floor(pos*float(n-1)))/float(2*n), tc.y));
+    vec4 s1 = texture(img_sclut, vec2((tc.x+float(n)+float(k1))/float(2*n), tc.y));
+    coeff = mix(c0, c1, f);
+    float camera_to_ref = mix(s0.x, s1.x, f);
+    // b = dot(rgb, 1); divide by 3 so white (1,1,1) yields scale 1.0
+    coeff.w = (b / 3.0) * params.value.y * camera_to_ref;
+  }
+
+  for(int i=0;i<spectral_groups;i++)
+  {
+    vec4 l = spectral_lambda[i];
+    vec4 x = (coeff.x*l+coeff.y)*l+coeff.z;
+    // Both paths produce: sigmoid * coeff.w * D65 = scene radiance.
+    // Camera sclut: sigmoid is reflectance under D65 (fit with D65).
+    // Emission lut:  sigmoid is reflectance under E;  *D65 converts to D65 radiance.
+    vec4 spectrum = (0.5*x*inversesqrt(x*x+1)+0.5)*coeff.w*spectral_d65(i) * shared_tint_scale[i];
+    spectral_store(img_out, p, i, spectrum);
+  }
+}

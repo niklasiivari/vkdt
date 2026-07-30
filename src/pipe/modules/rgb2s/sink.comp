@@ -1,0 +1,11 @@
+#version 460
+#extension GL_GOOGLE_include_directive : enable
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 1, binding = 0) uniform sampler2D img_temp;
+
+void main()
+{
+  // sink node for CPU readback of auto temperature
+}

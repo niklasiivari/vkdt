@@ -1,0 +1,20 @@
+# Put the spectral camera transform and spectral sfilmsim into the default
+# pipeline in place of `colour` and `filmcurv`. Generate the companion camera
+# LUT with: vkdt-mkclut --nanchor 9 --spectral <camera>.
+module:rgb2s:01
+module:sfilmsim:01
+module:s2rgb:01
+module:i-lut:sclut
+module:i-lut:filmsim
+param:i-lut:sclut:filename:data/${maker} ${model}.spectral.lut
+param:i-lut:filmsim:filename:data/filmsim.lut
+# Default graph input is crop -> colour. Replace that colour-transform edge.
+connect:crop:01:output:rgb2s:01:input
+connect:i-lut:sclut:output:rgb2s:01:sclut
+connect:rgb2s:01:output:sfilmsim:01:input
+connect:i-lut:filmsim:output:sfilmsim:01:profile
+connect:sfilmsim:01:output:s2rgb:01:input
+connect:s2rgb:01:output:display:main:input
+connect:s2rgb:01:output:hist:01:input
+connect:-1:-1:-1:colour:01:input
+connect:-1:-1:-1:filmcurv:01:input

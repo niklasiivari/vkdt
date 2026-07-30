@@ -1,0 +1,11 @@
+source:int:1:0
+mix:float:1:1.0
+d cct:float:1:6504
+bb cct:float:1:3200
+led cct:float:1:5000
+led cri:float:1:80
+led pmp:float:1:450
+discharg:int:1:0
+laser_l1:float:1:450
+laser_l2:float:1:635
+bandwdth:float:1:10

@@ -1,0 +1,21 @@
+source:combo:daylight:blackbody:white led:gas discharge:laser
+mix:slider:0:1
+group:source:0
+d cct:slider:4000:25000
+group:-1:-1
+group:source:1
+bb cct:slider:1000:10000
+group:-1:-1
+group:source:2
+led pmp:slider:380:780
+led cct:slider:2700:6500
+led cri:slider:50:100
+group:-1:-1
+group:source:3
+discharg:combo:sodium hps:sodium lps:mercury:metal halide:fluorescent
+group:-1:-1
+group:source:4
+laser_l1:slider:380:780
+laser_l2:slider:380:780
+bandwdth:slider:1:50
+group:-1:-1
