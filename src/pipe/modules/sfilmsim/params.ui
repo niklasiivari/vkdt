@@ -1,7 +1,8 @@
 process:combo:expose film and print:expose and scan negative:print negative
 ---
-group:process:102
 film:combo:kodak gold 200:kodak ultramax 400:kodak ektar 100:kodak portra 160:kodak portra 400:kodak portra 800:kodak portra 800 push 1:kodak portra 800 push 2:fujifilm c200:fujifilm xtra 400:fujifilm pro 400h:kodak vision3 50d:kodak vision3 250d:kodak vision3 200t:kodak vision3 500t:kodak verita 200d:kodak kodachrome 64 (positive):kodak ektachrome 100 (positive):fujifilm provia 100f (positive):fujifilm velvia 100 (positive):kodak double-x (b/w):kodak tri-x (b/w, positive)
+---
+group:process:102
 ev film:slider:-5:5
 g film:slider:0.5:1.5
 g fast:slider:0.5:1.5

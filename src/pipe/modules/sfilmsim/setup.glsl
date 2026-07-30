@@ -292,7 +292,7 @@ void setup_enlarger_illuminant(int film, int paper)
     vec4 dye_density = vec4(0.0);
     bool missing = false;
     float base_light = 1.0;
-    if(film >= 0)
+    if(film >= 0 && params.process != s_process_print_neg)
     {
       dye_density = texelFetch(img_filmsim, ivec2(tid * 2, film * 3 + s_dye_density), 0);
       missing = any(isnan(dye_density.xyz));

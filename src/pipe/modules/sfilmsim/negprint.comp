@@ -1,0 +1,52 @@
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+#include "head.glsl"
+#include "state.glsl"
+
+layout(set = 1, binding = 0) uniform sampler2D img_spectrum[spectral_groups];
+layout(set = 1, binding = 1, std430) readonly buffer buf_prep_t { filmsim_state_t prep; };
+layout(set = 1, binding = 2) uniform writeonly image2D img_out[spectral_groups];
+
+#include "state_ops.glsl"
+#include "print.glsl"
+
+float scan_glare(ivec2 ipos)
+{
+  if(prep.scan.glare_mean <= 0.0) return 0.0;
+  vec3 h = hash3(ipos, prep.scan.glare_seed);
+  return prep.scan.glare_mean * exp2(0.61823826 * (2.0*(h.x+h.y+h.z-1.5)) - 0.13246692);
+}
+
+void main()
+{
+  ivec2 ipos = ivec2(gl_GlobalInvocationID);
+  if(any(greaterThanEqual(ipos, textureSize(img_spectrum[0], 0)))) return;
+
+  // rgb2s outputs: spectrum = T_film(λ) · D65(λ) (scene radiance under D65).
+  // Dividing by D65 recovers the physical film spectral transmittance T_film(λ).
+  // We then project through the enlarger lamp + paper sensitivity to get paper exposure.
+  // This is the direct spectral equivalent of enlarger_expose_scanned_neg in legacy filmsim.
+  vec3 raw = vec3(0.0);
+  SPECTRAL_LOOP(group)
+  {
+    vec4 radiance = max(spectral_fetch(img_spectrum, ipos, group), vec4(0.0));
+    vec4 t_film = radiance / max(spectral_d65(group), vec4(1e-6));
+    raw.r += dot(t_film, prep.paper.enlarger_factor_r[group]);
+    raw.g += dot(t_film, prep.paper.enlarger_factor_g[group]);
+    raw.b += dot(t_film, prep.paper.enlarger_factor_b[group]);
+  }
+
+  vec3 log_raw = clamp(log2((raw + prep.paper.preflash) / prep.paper.enlarger_autoexp_norm + 1e-10) * log10_2,
+      vec3(-4.0), vec3(4.0));
+  log_raw = clamp(params.gamma_paper * log_raw, vec3(-4.0), vec3(4.0));
+
+  vec3 density = eval_paper_density(log_raw);
+  float glare = scan_glare(ipos);
+
+  SPECTRAL_LOOP(group)
+  {
+    vec4 dye = density.r*prep.scan.scan_dye_r[group] + density.g*prep.scan.scan_dye_g[group] + density.b*prep.scan.scan_dye_b[group];
+    vec4 radiance_out = (exp2(-dye) + vec4(glare)) * prep.scan.scan_radiance[group] / prep.scan.scan_autoexp_norm;
+    spectral_store(img_out, ipos, group, radiance_out);
+  }
+}

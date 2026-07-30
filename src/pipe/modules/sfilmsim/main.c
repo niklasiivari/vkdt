@@ -153,7 +153,7 @@ filmsim_make_plan(dt_module_t *module)
   plan.iht = module->connector[s_port_input].roi.ht;
   plan.owd = module->connector[s_port_output].roi.wd;
   plan.oht = module->connector[s_port_output].roi.ht;
-  plan.process = CLAMP(dt_module_param_int(module, dt_module_get_param(module->so, dt_token("process")))[0], 0, 1);
+  plan.process = CLAMP(dt_module_param_int(module, dt_module_get_param(module->so, dt_token("process")))[0], 0, 2);
   plan.couplers = dt_module_param_int(module, dt_module_get_param(module->so, dt_token("couplers")))[0];
   plan.halation = dt_module_param_int(module, dt_module_get_param(module->so, dt_token("halation")))[0];
   plan.hal_bounces = CLAMP(dt_module_param_int(module, dt_module_get_param(module->so, dt_token("hal bnc")))[0], 1, FILMSIM_MAX_HAL_BOUNCES);
@@ -403,6 +403,18 @@ build_scan_stage(dt_graph_t *graph, dt_module_t *module, int id_setup, int id_de
   filmsim_copy_module_port(graph, module, s_port_output, id_scan, 2);
 }
 
+static void
+build_negprint_stage(dt_graph_t *graph, dt_module_t *module, int id_setup, const filmsim_plan_t *plan)
+{
+  const int id_negprint = dt_node_add(graph, module, "sfilmsim", "negprint", plan->owd, plan->oht, 1, 0, 0, 3,
+      "input",     "read",  "rgba", "f16", dt_no_roi,
+      "prep",      "read",  "*",    "*",    dt_no_roi,
+      "output",    "write", "rgba", "f16", &module->connector[s_port_output].roi);
+  filmsim_copy_module_port(graph, module, s_port_input, id_negprint, 0);
+  CONN(dt_node_connect_named(graph, id_setup, "prep", id_negprint, "prep"));
+  filmsim_copy_module_port(graph, module, s_port_output, id_negprint, 2);
+}
+
 void
 create_nodes(
     dt_graph_t  *graph,
@@ -412,6 +424,12 @@ create_nodes(
 
   const int id_curvewarp = build_curvewarp_node(graph, module, &plan);
   const int id_setup = build_setup_node(graph, module, id_curvewarp);
+
+  if (plan.process == FILMSIM_PROCESS_PRINT_NEG)
+  {
+    build_negprint_stage(graph, module, id_setup, &plan);
+    return;
+  }
 
   const int id_expose = build_expose_stage(graph, module, id_setup, &plan);
   const int id_dev1 = build_postexpose_stage(graph, module, id_curvewarp, id_setup,

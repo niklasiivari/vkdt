@@ -9,7 +9,7 @@ layout(set = 1, binding = 1, std430) buffer buf_prep_t { filmsim_state_t prep; }
 
 void main()
 {
-  bool need_film = params.process != s_process_print_neg;
+  bool need_film  = params.process != s_process_print_neg;
   bool need_paper = params.process != s_process_scan_neg;
 
   if(need_film)
@@ -36,7 +36,6 @@ void main()
       prep.film.expose_factor_g[tid] = shared_expose_factor_g[tid];
       prep.film.expose_factor_b[tid] = shared_expose_factor_b[tid];
     }
-
     prep.scan.scan_dye_r[tid]        = shared_scan_dye_r[tid];
     prep.scan.scan_dye_g[tid]        = shared_scan_dye_g[tid];
     prep.scan.scan_dye_b[tid]        = shared_scan_dye_b[tid];
