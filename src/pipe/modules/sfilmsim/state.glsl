@@ -1,7 +1,7 @@
 // state.glsl: type of the prepared-state SSBO. Each pass declares its binding.
 struct filmsim_film_state_t
 {
-  vec4  expose_factor_r[11], expose_factor_g[11], expose_factor_b[11];
+  vec4  expose_factor_r[n_spectral_groups], expose_factor_g[n_spectral_groups], expose_factor_b[n_spectral_groups];
   float expose_autoexp_norm;
   float hl_boost_k_gain;
 
@@ -16,8 +16,8 @@ struct filmsim_paper_state_t
 {
   vec3  model_scale[3], model_bias[3], model_amps[3];
 
-  vec4  enlarger_dye_r[11], enlarger_dye_g[11], enlarger_dye_b[11];
-  vec4  enlarger_factor_r[11], enlarger_factor_g[11], enlarger_factor_b[11];
+  vec4  enlarger_dye_r[n_spectral_groups], enlarger_dye_g[n_spectral_groups], enlarger_dye_b[n_spectral_groups];
+  vec4  enlarger_factor_r[n_spectral_groups], enlarger_factor_g[n_spectral_groups], enlarger_factor_b[n_spectral_groups];
   vec3  preflash;
   float enlarger_autoexp_norm;
 };
@@ -36,8 +36,8 @@ struct filmsim_halation_state_t
 
 struct filmsim_scan_state_t
 {
-  vec4  scan_dye_r[11], scan_dye_g[11], scan_dye_b[11];
-  vec4  scan_radiance[11];
+  vec4  scan_dye_r[n_spectral_groups], scan_dye_g[n_spectral_groups], scan_dye_b[n_spectral_groups];
+  vec4  scan_radiance[n_spectral_groups];
   float scan_autoexp_norm;
   float glare_mean;
   uint  glare_seed;

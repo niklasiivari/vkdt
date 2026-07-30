@@ -21,7 +21,7 @@ void main()
 {
   FILMSIM_BOUNDS_INIT(ipos);
   vec3 raw = vec3(0.0);
-  for(int group=0; group<n_expose_groups; group++)
+  SPECTRAL_LOOP(group)
   {
     vec4 radiance = max(spectral_fetch(img_spectrum, ipos, group), vec4(0.0));
     raw.r += dot(radiance, prep.film.expose_factor_r[group]);

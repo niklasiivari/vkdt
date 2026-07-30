@@ -32,9 +32,9 @@ vec2 sclut_chroma(vec2 tc, int idx, int n)
 {
   vec4 cf = texture(img_sclut, vec2((tc.x + float(idx)) / float(2 * n), tc.y));
   vec3 xyz = vec3(0.0);
-  for(int i=0; i<spectral_groups; i++)
+  SPECTRAL_LOOP(i)
   {
-    vec4 l = spectral_lambda[i];
+    vec4 l = spectral_lambda(i);
     vec4 x = (cf.x*l + cf.y)*l + cf.z;
     vec4 refl = 0.5*x*inversesqrt(x*x+1.0) + 0.5;
     vec4 rad = refl * spectral_d65(i);

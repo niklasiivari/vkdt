@@ -25,7 +25,7 @@ void main()
   {
     if (params.tint.x != 0.0)
     {
-      vec4 l = spectral_lambda[tid];
+      vec4 l = spectral_lambda(tid);
       vec4 w = vec4(1.0) - (l - vec4(540.0))*(l - vec4(540.0))/(160.0*160.0);
       shared_tint_scale[tid] = exp2(-params.tint.x * 0.5 * w);
     }
@@ -65,9 +65,9 @@ void main()
     coeff.w = (b / 3.0) * params.value.y * camera_to_ref;
   }
 
-  for(int i=0;i<spectral_groups;i++)
+  SPECTRAL_LOOP(i)
   {
-    vec4 l = spectral_lambda[i];
+    vec4 l = spectral_lambda(i);
     vec4 x = (coeff.x*l+coeff.y)*l+coeff.z;
     // Both paths produce: sigmoid * coeff.w * D65 = scene radiance.
     // Camera sclut: sigmoid is reflectance under D65 (fit with D65).

@@ -23,9 +23,9 @@ shared vec3 shared_grain_uniformity;
 shared vec3 shared_grain_dmin;
 shared vec3 shared_halation_strength;
 
-shared vec4 shared_expose_factor_r[11];
-shared vec4 shared_expose_factor_g[11];
-shared vec4 shared_expose_factor_b[11];
+shared vec4 shared_expose_factor_r[n_spectral_groups];
+shared vec4 shared_expose_factor_g[n_spectral_groups];
+shared vec4 shared_expose_factor_b[n_spectral_groups];
 shared vec4 shared_expose_ae_bb;
 shared float shared_expose_autoexp_norm;
 shared vec4 shared_reduce_acc[32];
@@ -36,15 +36,15 @@ shared vec3 shared_Kr;
 shared vec3 shared_langmuir_k_dmax;
 shared vec3 shared_langmuir_num_dmax;
 
-shared vec4 shared_scan_dye_r[11], shared_scan_dye_g[11], shared_scan_dye_b[11];
-shared vec4 shared_scan_radiance[11];
+shared vec4 shared_scan_dye_r[n_spectral_groups], shared_scan_dye_g[n_spectral_groups], shared_scan_dye_b[n_spectral_groups];
+shared vec4 shared_scan_radiance[n_spectral_groups];
 shared float shared_scan_autoexp, shared_scan_autoexp_norm;
 shared vec2 shared_m_scan;
 shared float shared_glare_mean;
 shared uint shared_glare_seed;
 
-shared vec4 shared_enlarger_dye_r[11], shared_enlarger_dye_g[11], shared_enlarger_dye_b[11];
-shared vec4 shared_enlarger_factor_r[11], shared_enlarger_factor_g[11], shared_enlarger_factor_b[11];
+shared vec4 shared_enlarger_dye_r[n_spectral_groups], shared_enlarger_dye_g[n_spectral_groups], shared_enlarger_dye_b[n_spectral_groups];
+shared vec4 shared_enlarger_factor_r[n_spectral_groups], shared_enlarger_factor_g[n_spectral_groups], shared_enlarger_factor_b[n_spectral_groups];
 shared vec3 shared_preflash;
 shared float shared_enlarger_autoexp, shared_enlarger_autoexp_norm;
 
@@ -196,7 +196,7 @@ void setup_coupler_matrix()
 void setup_expose_film(int film)
 {
   int tid = int(gl_LocalInvocationIndex);
-  if (tid < 11)
+  if (tid < n_spectral_groups)
   {
     shared_expose_factor_r[tid] = vec4(0.0);
     shared_expose_factor_g[tid] = vec4(0.0);
@@ -268,7 +268,7 @@ vec3 filter_neutral(vec2 extra_my)
 void setup_enlarger_illuminant(int film, int paper)
 {
   int tid = int(gl_LocalInvocationIndex);
-  if (tid < 11)
+  if (tid < n_spectral_groups)
   {
     shared_enlarger_dye_r[tid] = vec4(0.0);
     shared_enlarger_dye_g[tid] = vec4(0.0);
@@ -336,7 +336,7 @@ void setup_enlarger_illuminant(int film, int paper)
 void setup_scan_illuminant()
 {
   int tid = int(gl_LocalInvocationIndex);
-  if (tid < 11)
+  if (tid < n_spectral_groups)
   {
     shared_scan_dye_r[tid] = vec4(0.0);
     shared_scan_dye_g[tid] = vec4(0.0);

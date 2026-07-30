@@ -31,7 +31,7 @@ void modify_roi_in(dt_graph_t *graph, dt_module_t *module)
 void modify_roi_out(dt_graph_t *graph, dt_module_t *module)
 {
   module->connector[1].roi = module->connector[0].roi;
-  module->connector[1].array_length = 11;
+  module->connector[1].array_length = 10;
 }
 
 void create_nodes(dt_graph_t *graph, dt_module_t *module)

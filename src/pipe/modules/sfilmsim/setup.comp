@@ -28,7 +28,7 @@ void main()
   setup_scan_illuminant();
 
   int tid = int(gl_LocalInvocationIndex);
-  if (tid < 11)
+  if (tid < n_spectral_groups)
   {
     if(need_film)
     {

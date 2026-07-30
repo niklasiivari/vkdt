@@ -24,7 +24,7 @@ void main()
   if(params.process == s_process_print)
     density = eval_paper_density(enlarger_expose_film(density));
   float glare = scan_glare(ipos);
-  for(int group=0; group<spectral_groups; group++)
+  SPECTRAL_LOOP(group)
   {
     vec4 dye = density.r*prep.scan.scan_dye_r[group] + density.g*prep.scan.scan_dye_g[group] + density.b*prep.scan.scan_dye_b[group];
     vec4 radiance = (exp2(-dye) + vec4(glare)) * prep.scan.scan_radiance[group] / prep.scan.scan_autoexp_norm;

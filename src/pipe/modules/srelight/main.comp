@@ -107,7 +107,7 @@ void main()
     float mix_val = clamp(params.mix_val, 0.0, 1.0);
     if (mix_val <= 0.0)
     {
-      for (int group = 0; group < spectral_groups; group++)
+      SPECTRAL_LOOP(group)
         shared_relight_ratio[group] = vec4(1.0);
     }
     else
@@ -115,16 +115,16 @@ void main()
       vec2 daylight_m = spectral_daylight_weights(params.d_cct);
       vec4 spd_groups[spectral_groups];
       float sum_y = 0.0;
-      for (int group = 0; group < spectral_groups; group++)
+      SPECTRAL_LOOP(group)
       {
-        vec4 l = spectral_lambda[group];
+        vec4 l = spectral_lambda(group);
         vec4 spd = eval_light_spd_vec(group, l, daylight_m);
         spd_groups[group] = spd;
-        sum_y += dot(spd * spectral_cmf_y[group], spectral_mask(group)) * spectral_step_nm;
+        sum_y += dot(spd, spectral_cmf_y[group]) * spectral_step_nm;
       }
       float norm_factor = 1.0 / max(sum_y, 1e-6);
 
-      for (int group = 0; group < spectral_groups; group++)
+      SPECTRAL_LOOP(group)
       {
         vec4 ref_d65 = max(spectral_d65(group), vec4(1e-6));
         vec4 relight_spd = spd_groups[group] * norm_factor;
@@ -137,7 +137,7 @@ void main()
   ivec2 p = ivec2(gl_GlobalInvocationID);
   if(any(greaterThanEqual(p, imageSize(img_out[0])))) return;
 
-  for(int group = 0; group < spectral_groups; group++)
+  SPECTRAL_LOOP(group)
   {
     vec4 in_rad = spectral_fetch(img_in, p, group);
     vec4 out_rad = in_rad * shared_relight_ratio[group];

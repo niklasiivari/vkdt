@@ -7,18 +7,13 @@
   do { \
     RAW = vec3(0.0); \
     [[unroll]] \
-    for(int i = 0; i < 10; i++) \
+    for(int i = 0; i < n_spectral_groups; i++) \
     { \
       vec4 ds = (DENS).x * DYE_R[i] + (DENS).y * DYE_G[i] + (DENS).z * DYE_B[i]; \
       vec4 light = exp2(-ds); \
       RAW.r += dot(light, FAC_R[i]); \
       RAW.g += dot(light, FAC_G[i]); \
       RAW.b += dot(light, FAC_B[i]); \
-    } \
-    { \
-      float ds = (DENS).x * DYE_R[10].x + (DENS).y * DYE_G[10].x + (DENS).z * DYE_B[10].x; \
-      float light = exp2(-ds); \
-      RAW += vec3(light) * vec3(FAC_R[10].x, FAC_G[10].x, FAC_B[10].x); \
     } \
   } while(false)
 

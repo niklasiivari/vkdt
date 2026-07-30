@@ -85,7 +85,7 @@ void modify_roi_out(
   const int s = filmsim_enlarge_scale(module);
   module->connector[s_port_output].roi.full_wd = MIN(32768, module->connector[s_port_input].roi.full_wd * s);
   module->connector[s_port_output].roi.full_ht = MIN(32768, module->connector[s_port_input].roi.full_ht * s);
-  module->connector[s_port_output].array_length = 11;
+  module->connector[s_port_output].array_length = 10;
 }
 
 // write the fitted neutral for a film/paper pair onto the sliders

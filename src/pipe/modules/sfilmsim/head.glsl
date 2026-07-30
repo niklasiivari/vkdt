@@ -75,11 +75,11 @@ const int s_paper_offset = 22; // first paper in data list/lut; == len(film_stoc
 #define s_process_scan_neg  FILMSIM_PROCESS_SCAN_NEG
 #define s_process_print_neg FILMSIM_PROCESS_PRINT_NEG
 
-// 41 spectral bands, packed four per vec4.
-const int n_spectral_bands = 41;
-const int n_spectral_groups = 10; // full vec4 groups; band 40 is a scalar tail
-const int n_expose_bands  = 36;
-const int n_expose_groups = 9;    // 36/4, no tail
+// 40 spectral bands, packed four per vec4.
+const int n_spectral_bands = 40;
+const int n_spectral_groups = 10; // full vec4 groups
+const int n_expose_bands  = 40;
+const int n_expose_groups = 10;   // 40/4, full vec4 groups
 #define hal_max_bounces FILMSIM_MAX_HAL_BOUNCES
 
 // In-emulsion scatter constants; blur widths live in main.c.
