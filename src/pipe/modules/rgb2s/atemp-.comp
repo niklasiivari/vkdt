@@ -1,5 +1,6 @@
 #version 460
 #extension GL_GOOGLE_include_directive : enable
+#define HAVE_NO_ATOMICS
 #include "shared.glsl"
 #include "shared/spectral.glsl"
 #include "colourspaces.glsl"

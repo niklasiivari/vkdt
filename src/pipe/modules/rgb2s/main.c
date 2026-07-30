@@ -157,7 +157,8 @@ void create_nodes(dt_graph_t *graph, dt_module_t *module)
   {
     const dt_roi_t tiny = { .wd = 1, .ht = 1 };
     const int push = have_pick ? 1 : 0;
-    id_auto = dt_node_add(graph, module, "rgb2s", "autotemp", 1, 1, 1, sizeof(push), &push, 3,
+    const char *kernel = (qvk.float_atomics_supported || !have_pick || module->connector[3].format != dt_token("atom")) ? "autotemp" : "atemp-";
+    id_auto = dt_node_add(graph, module, "rgb2s", kernel, 1, 1, 1, sizeof(push), &push, 3,
         "sclut", "read", "rgba", "f32", dt_no_roi,
         "temp", "write", "y", "f32", &tiny,
         "picked", "read", "r", have_pick ? dt_token_str(module->connector[3].format) : "f16", dt_no_roi);
