@@ -511,7 +511,7 @@ dt_api_blur_sep(
     int          connid_input,
     int         *id_blur_in,
     int         *id_blur_out,
-    float        radius)        // blur radius in pixels, = 3 sigma (will be rounded down to int)
+    float        radius)        // blur radius in pixels, = 3 sigma
 {
   // detect pixel format on input and blur the whole thing in separable kernels
   const dt_connector_t *conn_input = nodeid_input >= 0 ?
